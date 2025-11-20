@@ -1,0 +1,11 @@
+## This file must *NOT* be checked into Version Control Systems,
+# as it contains information specific to your local configuration.
+#
+# Location of the SDK. This is only used by Gradle.
+sdk.dir=/Users/arekalov/Library/Android/sdk
+
+# API Keys
+YANDEX_API_KEY=your_yandex_api_key_here
+YANDEX_FOLDER_ID=your_folder_id_here
+MCP_SERVER_URL=http://0.0.0.0:1234
+
