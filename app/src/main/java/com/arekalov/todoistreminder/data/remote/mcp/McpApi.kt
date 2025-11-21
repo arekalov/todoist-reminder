@@ -1,5 +1,6 @@
 package com.arekalov.todoistreminder.data.remote.mcp
 
+import com.arekalov.todoistreminder.data.remote.mcp.models.DailySummary
 import com.arekalov.todoistreminder.data.remote.mcp.models.McpContent
 import com.arekalov.todoistreminder.data.remote.mcp.models.McpToolCallRequest
 import com.arekalov.todoistreminder.data.remote.mcp.models.McpToolCallResponse
@@ -29,12 +30,55 @@ class McpApi @Inject constructor(
         }.body()
         
         if (response.isError) {
-            throw Exception(response.content.firstOrNull()?.text ?: "Unknown error")
+            throw Exception(response.content?.firstOrNull()?.text ?: "Unknown error")
         }
         
-        response.content.firstOrNull()?.text ?: ""
+        response.content?.firstOrNull()?.text ?: ""
     }
     
     suspend fun getActiveTasks(): Result<String> = callTool("get_active_tasks")
+    
+    /**
+     * Получает дневную сводку от композитора: задачи + анекдот
+     */
+    suspend fun getDailySummary(): Result<DailySummary> = runCatching {
+        val request = McpToolCallRequest(
+            name = "get_daily_summary",
+            arguments = emptyMap()
+        )
+        
+        val response: McpToolCallResponse = httpClient.post("$mcpServerUrl/mcp/tools/call") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+        
+        // Композитор использует format {result, error}
+        if (response.error != null) {
+            throw Exception(response.error)
+        }
+        
+        val fullText = response.result ?: ""
+        
+        // Парсим текстовый результат
+        // Формат: "🎯 ДНЕВНАЯ СВОДКА\n\n😄 АНЕКДОТ ДНЯ:\n{joke}\n\n📋 ЗАДАЧИ НА СЕГОДНЯ:\n{tasks}"
+        val parts = fullText.split("📋 ЗАДАЧИ НА СЕГОДНЯ:")
+        
+        val joke = if (parts.isNotEmpty()) {
+            val jokeSection = parts[0]
+                .substringAfter("😄 АНЕКДОТ ДНЯ:")
+                .trim()
+            jokeSection
+        } else {
+            ""
+        }
+        
+        val tasks = if (parts.size > 1) {
+            parts[1].trim()
+        } else {
+            ""
+        }
+        
+        DailySummary(tasks = tasks, joke = joke)
+    }
 }
 

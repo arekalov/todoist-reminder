@@ -173,7 +173,7 @@ fun SettingsScreen(
                         valueRange = 15f..180f,
                         steps = 164
                     )
-                }`
+                }
             }
         }
     }

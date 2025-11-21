@@ -24,34 +24,50 @@ class TasksViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = TasksUiState.Loading
             
-            // 1. Получить задачи через MCP
-            val tasksResult = mcpApi.getActiveTasks()
-            if (tasksResult.isFailure) {
+            // 1. Получить дневную сводку (задачи + анекдот) через MCP композитор
+            val summaryResult = mcpApi.getDailySummary()
+            if (summaryResult.isFailure) {
                 _uiState.value = TasksUiState.Error(
-                    tasksResult.exceptionOrNull()?.message ?: "Unknown error"
+                    summaryResult.exceptionOrNull()?.message ?: "Unknown error"
                 )
                 return@launch
             }
             
-            val rawTasks = tasksResult.getOrNull() ?: ""
-            
-            // Если задач нет
-            if (rawTasks.contains("No active tasks")) {
-                _uiState.value = TasksUiState.Success("✅ У вас нет активных задач на сегодня!")
+            val summary = summaryResult.getOrNull() ?: run {
+                _uiState.value = TasksUiState.Error("Failed to get summary")
                 return@launch
             }
             
-            // 2. Форматировать через Yandex GPT
-            val formattedResult = formatTasksUseCase(rawTasks)
-            if (formattedResult.isFailure) {
-                _uiState.value = TasksUiState.Error(
-                    formattedResult.exceptionOrNull()?.message ?: "Formatting error"
+            // Проверка на отсутствие задач
+            val hasNoTasks = summary.tasks.contains("No active tasks") || summary.tasks.isBlank()
+            
+            if (hasNoTasks) {
+                // Форматируем только анекдот
+                val formattedJokeResult = formatTasksUseCase("Анекдот дня:\n${summary.joke}")
+                val formattedJoke = formattedJokeResult.getOrNull() ?: summary.joke
+                
+                _uiState.value = TasksUiState.Success(
+                    joke = formattedJoke,
+                    tasks = "✅ У вас нет активных задач на сегодня!"
                 )
                 return@launch
             }
+            
+            // 2. Форматировать задачи через Yandex GPT
+            val formattedTasksResult = formatTasksUseCase(summary.tasks)
+            if (formattedTasksResult.isFailure) {
+                _uiState.value = TasksUiState.Error(
+                    formattedTasksResult.exceptionOrNull()?.message ?: "Formatting error"
+                )
+                return@launch
+            }
+            
+            // 3. Форматировать анекдот через Yandex GPT
+            val formattedJokeResult = formatTasksUseCase("Анекдот дня:\n${summary.joke}")
             
             _uiState.value = TasksUiState.Success(
-                formattedText = formattedResult.getOrNull() ?: ""
+                joke = formattedJokeResult.getOrNull() ?: summary.joke,
+                tasks = formattedTasksResult.getOrNull() ?: summary.tasks
             )
         }
     }
@@ -60,7 +76,7 @@ class TasksViewModel @Inject constructor(
 sealed class TasksUiState {
     object Initial : TasksUiState()
     object Loading : TasksUiState()
-    data class Success(val formattedText: String) : TasksUiState()
+    data class Success(val joke: String, val tasks: String) : TasksUiState()
     data class Error(val message: String) : TasksUiState()
 }
 
